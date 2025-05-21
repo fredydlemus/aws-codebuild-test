@@ -1,0 +1,31 @@
+version: 2.0
+
+phases:
+  install:
+    runtime-versions:
+      docker: 20
+    commands:
+      - echo "Installing AWS CLI v2..."
+      - curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+      - unzip awscliv2.zip
+      - ./aws/install
+  pre_builds:
+    commands:
+      - echo "Logging in to Amazon ECR…"
+      - $(aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_REPO_URI)
+      - IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:0:7}
+  build:
+    commands:
+      - echo "Building & testing multi-stage Docker image…"
+      - docker build --target runtime -t $ECR_REPO_URI:runtime-$IMAGE_TAG .
+      - docker build --target linter -t lint-check .
+      - docker build --target tester -t test-runner .
+  post_build:
+    commands:
+      - echo "Pushing runtime image…"
+      - docker push $ECR_REPO_URI:runtime-$IMAGE_TAG
+      - echo "Build completed on `date`"
+artifacts:
+  files:
+    - '**/*'
+  discard_paths: yes

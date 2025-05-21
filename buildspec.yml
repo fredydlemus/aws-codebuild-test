@@ -9,17 +9,25 @@ phases:
       - curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
       - unzip awscliv2.zip
       - ./aws/install
-  pre_builds:
+  pre_build:
     commands:
       - echo "Logging in to Amazon ECR…"
-      - $(aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_REPO_URI)
-      - IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:0:7}
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $ECR_REPO_URI
+      - export IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:0:7}
   build:
     commands:
-      - echo "Building & testing multi-stage Docker image…"
-      - docker build --target runtime -t $ECR_REPO_URI:runtime-$IMAGE_TAG .
+      - echo "Building linter image…"
       - docker build --target linter -t lint-check .
+      - echo "Running linter…"
+      - docker run --rm lint-check
+
+      - echo "Building tester image…"
       - docker build --target tester -t test-runner .
+      - echo "Running tests…"
+      - docker run --rm test-runner
+
+      - echo "Building runtime image…"
+      - docker build --target runtime -t $ECR_REPO_URI:runtime-$IMAGE_TAG .
   post_build:
     commands:
       - echo "Pushing runtime image…"
